@@ -5,6 +5,11 @@ VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LyncLog", "LyncLog\LyncLog.csproj", "{CADE1C7B-5685-42D7-9CD6-A26529E60921}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A86C3277-9E46-4F01-B824-CAA85F6C8DFB}"
+	ProjectSection(SolutionItems) = preProject
+		Apache License.txt = Apache License.txt
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

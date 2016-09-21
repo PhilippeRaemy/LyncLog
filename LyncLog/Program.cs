@@ -43,43 +43,71 @@ namespace LyncLog
 
         static void Main(string[] args)
         {
-            try
+            Console.WriteLine("LyncLog starting...");
+            InitializeTrace();
+            LyncClient client = null;
+            var cancelRequested = false;
+            Console.CancelKeyPress += (_, __) => cancelRequested = true;
+            while (!cancelRequested)
             {
-                Console.WriteLine("LyncLog starting...");
-                InitializeTrace();
-
-                LyncClient client=null;
-                var msgsent = false;
-                while(client == null)
+                if (client == null)
                 {
                     try
                     {
-                        client = LyncClient.GetClient();
-                    }
-                    catch (ClientNotFoundException)
-                    {
-                        if (!msgsent)
+
+                        var msgsent = false;
+                        while (client == null)
                         {
-                            Trace.TraceWarning("The Lync client is not running. Waiting... ");
-                            Console.WriteLine("The Lync client is not running. Waiting... ");
-                            msgsent = true;
+                            try
+                            {
+                                client = LyncClient.GetClient();
+                            }
+                            catch (ClientNotFoundException)
+                            {
+                                if (!msgsent)
+                                {
+                                    Trace.TraceWarning("The Lync client is not running. Waiting... ");
+                                    Console.WriteLine("The Lync client is not running. Waiting... ");
+                                    msgsent = true;
+                                }
+                                // checking that the state is active
+                                if(3!=((dynamic)client?.InnerObject)?.State) { 
+                                    client = null;
+                                }
+                                Thread.Sleep(1000);
+                            }
                         }
-                        Thread.Sleep(1000);
+                        Trace.TraceWarning("The Lync client is running.");
+                        Console.WriteLine("The Lync client is running.");
+                        client.ConversationManager.ConversationAdded +=
+                            Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationAdded);
+                        client.ConversationManager.ConversationRemoved +=
+                            Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationRemoved);
+                        client.ConversationManager.Conversations.ForEach(InitializeTracking);
+                        ActiveConversations.ForEach(kvp => kvp.DumpConversation());
+                    }
+                    catch (Exception e)
+                    {
+                        Trace.TraceError(e.ToString());
                     }
                 }
-                Trace.TraceWarning("The Lync client is running.");
-                Console.WriteLine("The Lync client is running.");
-                client.ConversationManager.ConversationAdded +=
-                    Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationAdded);
-                client.ConversationManager.ConversationRemoved +=
-                    Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationRemoved);
-                client.ConversationManager.Conversations.ForEach(InitializeTracking);
-                ActiveConversations.ForEach(kvp => kvp.DumpConversation());
-                Console.ReadLine();
-            }
-            catch (Exception e)
-            {
-                Trace.TraceError(e.ToString());
+                try
+                {
+                    if (((dynamic)client?.InnerObject)?.State!=3)
+                    {
+                        Console.WriteLine("The Lync client appears to have changed status.");
+                        client = null;
+                    }
+                }
+                catch
+                {
+                    client = null;
+                }
+                if (client == null)
+                {
+                    Console.WriteLine("The Lync client has been lost.");
+                }
+                Thread.Sleep(1000);
             }
         }
 

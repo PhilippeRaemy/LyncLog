@@ -29,6 +29,7 @@ namespace LyncLog
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
     using Microsoft.Lync.Model;
     using Microsoft.Lync.Model.Conversation;
@@ -79,11 +80,21 @@ namespace LyncLog
                         }
                         Trace.TraceWarning("The Lync client is running.");
                         Console.WriteLine("The Lync client is running.");
-                        client.ConversationManager.ConversationAdded +=
-                            Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationAdded);
-                        client.ConversationManager.ConversationRemoved +=
-                            Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationRemoved);
+                        var handler = typeof(ConversationManager).GetField("ConversationAdded", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(client.ConversationManager) as Delegate;
+                        // check if there are already event handlers. We can assume that all events are subscribed at once, or not at all.
+                        if (handler?.GetInvocationList().Length > 0)
+                        {
+                            Console.WriteLine("InitializeTracking: ConversationManager events already subscribed. Skipping!");
+                        }
+                        else { 
+                            client.ConversationManager.ConversationAdded   -= Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationAdded);
+                            client.ConversationManager.ConversationRemoved -= Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationRemoved);
+                            client.ConversationManager.ConversationAdded   += Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationAdded);
+                            client.ConversationManager.ConversationRemoved += Catcher<ConversationManagerEventArgs>(ConversationManager_ConversationRemoved);
+                            Console.WriteLine("InitializeTracking: ConversationManager events subscribed.");
+                        }
                         client.ConversationManager.Conversations.ForEach(InitializeTracking);
+
                         ActiveConversations.ForEach(kvp => kvp.DumpConversation());
                     }
                     catch (Exception e)
@@ -124,7 +135,7 @@ namespace LyncLog
 
             var consoleTraceListener = new ConsoleTraceListener
             {
-                Filter = new EventTypeFilter(SourceLevels.Information)
+                Filter = new EventTypeFilter(SourceLevels.All)
             };
             var textWriterTraceListener =
                 new TextWriterTraceListener(
@@ -133,7 +144,7 @@ namespace LyncLog
                     TraceOutputOptions = TraceOptions.DateTime,
                     Filter = new EventTypeFilter(SourceLevels.All)
                 };
-            Trace.Listeners.AddRange(new[]{/*consoleTraceListener, */textWriterTraceListener});
+            Trace.Listeners.AddRange(new[]{consoleTraceListener, (TraceListener)textWriterTraceListener});
             Trace.AutoFlush = true;
             Trace.TraceWarning("Lynclog started");
         }
@@ -142,6 +153,13 @@ namespace LyncLog
         {
             // if (conversation.State != ConversationState.Active) return;
             StoreConversation(conversation);
+            var handler = typeof(Conversation).GetField("ContextDataReceived", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(conversation) as Delegate;
+            // check if there are already event handlers. We can assume that all events are subscribed at once, or not at all.
+            if (handler?.GetInvocationList().Length > 0)
+            {
+                Console.WriteLine("InitializeTracking: Conversation events already subscribed. Skipping!");
+                return;
+            }
 
             conversation.ContextDataReceived       += Catcher<ContextEventArgs                       >(Conversation_ContextDataReceived);
             conversation.ContextDataSent           += Catcher<ContextEventArgs                       >(Conversation_ContextDataSent);
@@ -149,6 +167,7 @@ namespace LyncLog
             conversation.InitialContextSent        += Catcher<InitialContextEventArgs                >(Conversation_InitialContextSent);
             conversation.ActionAvailabilityChanged += Catcher<ConversationActionAvailabilityEventArgs>(Conversation_ActionAvailabilityChanged);
             conversation.PropertyChanged           += Catcher<ConversationPropertyChangedEventArgs   >(Conversation_PropertyChanged);
+            Console.WriteLine("InitializeTracking: Conversation events subscribed.");
         }
 
         static void Conversation_PropertyChanged(object sender, ConversationPropertyChangedEventArgs e)
